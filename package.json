@@ -1,0 +1,21 @@
+{
+  "name": "@intelli-1113/stratos-sdk",
+  "version": "1.0.0",
+  "description": "One-line OpenLLMetry telemetry for Stratos AI — agent liveness, tokens, cost, prompts and tools.",
+  "type": "module",
+  "main": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./register": "./src/register.js"
+  },
+  "files": ["src"],
+  "scripts": {
+    "test": "node -e \"import('./src/index.js').then(m=>console.log('ok',Object.keys(m)))\""
+  },
+  "keywords": ["stratos", "openllmetry", "opentelemetry", "observability", "llm", "agent"],
+  "license": "MIT",
+  "dependencies": {
+    "@opentelemetry/exporter-trace-otlp-http": "^0.203.0",
+    "@traceloop/node-server-sdk": "^0.27.0"
+  }
+}
