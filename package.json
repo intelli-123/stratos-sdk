@@ -1,13 +1,14 @@
 {
   "name": "@intelli-1113/stratos-sdk",
-  "version": "1.0.0",
-  "description": "One-line OpenLLMetry telemetry for Stratos AI — agent liveness, tokens, cost, prompts and tools.",
+  "version": "1.1.0",
+  "description": "One install for Stratos AI: OpenLLMetry agent telemetry (--import) AND the stratos-mcp-proxy for MCP servers.",
   "type": "module",
   "main": "./src/index.js",
   "exports": {
     ".": "./src/index.js",
     "./register": "./src/register.js"
   },
+  "bin": { "stratos-mcp-proxy": "./src/mcp-proxy.js" },
   "files": ["src"],
   "scripts": {
     "test": "node -e \"import('./src/index.js').then(m=>console.log('ok',Object.keys(m)))\""
