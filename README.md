@@ -48,7 +48,10 @@ npm i -g @intelli-1113/stratos-sdk
 "weather": {
   "command": "stratos-mcp-proxy",
   "args": ["--","npx","-y","@scope/weather-mcp@latest"],
-  "env": { "STRATOS_TOKEN":"<token>", "STRATOS_URL":"http://localhost:4000", "STRATOS_APP_NAME":"weather" }
+  "env": {
+     "STRATOS_TOKEN":"<token>", 
+     "STRATOS_URL":"http://localhost:4000",
+     "STRATOS_APP_NAME":"weather" }
 }
 ```
 It forwards the JSON-RPC stream verbatim and reports each **tool call** (name, args, result, latency) + liveness.
