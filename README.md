@@ -40,14 +40,16 @@ Both come from env, read at startup — change the `.env` value and restart. No 
 
 ## MCP servers (Claude Desktop / Cursor / VS Code)
 The same package ships a `stratos-mcp-proxy` command for monitoring host-launched MCP servers.
-Add an agent (type `mcp`) in Stratos, then wrap the server's command in the host config:
+Install it globally, add an agent (type `mcp`) in Stratos, then wrap the server's command:
+```bash
+npm i -g @intelli-1113/stratos-sdk
+```
 ```json
 "weather": {
-  "command": "npx",
-  "args": ["-y","@intelli-1113/stratos-sdk","stratos-mcp-proxy","--","npx","-y","@scope/weather-mcp@latest"],
+  "command": "stratos-mcp-proxy",
+  "args": ["--","npx","-y","@scope/weather-mcp@latest"],
   "env": { "STRATOS_TOKEN":"<token>", "STRATOS_URL":"http://localhost:4000", "STRATOS_APP_NAME":"weather" }
 }
 ```
-(Or `npm i -g @intelli-1113/stratos-sdk` once, then use `"command":"stratos-mcp-proxy"`.) It forwards
-the JSON-RPC stream verbatim and reports each **tool call** (name, args, result, latency) + liveness.
+It forwards the JSON-RPC stream verbatim and reports each **tool call** (name, args, result, latency) + liveness.
 Note: host MCP servers don't call the LLM themselves, so tokens/cost aren't captured.
