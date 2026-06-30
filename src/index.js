@@ -34,6 +34,7 @@ function detectFramework() {
   const has = (n) => n in deps || resolvable(n);
   // Higher-level agent frameworks FIRST (several pull in @langchain/* transitively).
   if (has("@google/adk") || has("google-adk") || has("@iqai/adk")) return "google-adk";
+  if (has("@openai/agents")) return "openai-agents";
   if (has("llamaindex")) return "llamaindex";
   if (has("crewai")) return "crewai";
   if (has("@langchain/langgraph")) return "langgraph";
