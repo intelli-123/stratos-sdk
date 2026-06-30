@@ -12,19 +12,34 @@
 import * as traceloop from "@traceloop/node-server-sdk";
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
 import { createRequire } from "node:module";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 const _require = createRequire(import.meta.url);
-const has = (pkg) => { try { _require.resolve(pkg); return true; } catch { return false; } };
+const resolvable = (pkg) => { try { _require.resolve(pkg); return true; } catch { return false; } };
 
-// Detect the agent framework from what's actually installed — no manual input.
+// The agent's DIRECT dependencies (most reliable signal of the framework in use).
+// Resolution alone is unreliable — some packages (e.g. @google/adk) block default
+// resolution via "exports", and others appear only transitively.
+function agentDeps() {
+  try {
+    const pkg = JSON.parse(readFileSync(join(process.cwd(), "package.json"), "utf8"));
+    return { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) };
+  } catch { return {}; }
+}
+
+// Detect the agent framework from declared deps (preferred) or resolution — no manual input.
 function detectFramework() {
+  const deps = agentDeps();
+  const has = (n) => n in deps || resolvable(n);
+  // Higher-level agent frameworks FIRST (several pull in @langchain/* transitively).
+  if (has("@google/adk") || has("google-adk") || has("@iqai/adk")) return "google-adk";
+  if (has("llamaindex")) return "llamaindex";
+  if (has("crewai")) return "crewai";
   if (has("@langchain/langgraph")) return "langgraph";
   if (has("langchain") || has("@langchain/core")) return "langchain";
-  if (has("llamaindex")) return "llamaindex";
-  if (has("@google/adk") || has("google-adk") || has("@iqai/adk")) return "google-adk";
-  if (has("@google/generative-ai") || has("@google/genai")) return "google-genai";
-  if (has("crewai")) return "crewai";
   if (has("ai")) return "vercel-ai";
+  if (has("@google/generative-ai") || has("@google/genai")) return "google-genai";
   if (has("@anthropic-ai/sdk")) return "anthropic";
   if (has("openai")) return "openai";
   return null;
