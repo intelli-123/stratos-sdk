@@ -35,6 +35,12 @@ start({ token: "...", url: "https://stratos.lnt.com", appName: "my-agent" });
 ## Why it must load first
 OpenLLMetry patches `openai`/`langchain` to capture spans — it has to run **before** those modules are imported. The `--import` flag and the `/register` entry both guarantee that.
 
+## Auto-detected metadata (no manual entry)
+On each heartbeat the SDK reports, and Stratos auto-fills:
+- **framework** — detected from installed deps (langchain/langgraph, llamaindex, google-adk, vercel-ai, anthropic, openai…).
+- **model** — from `STRATOS_MODEL` / `NVIDIA_MODEL` / `OPENAI_MODEL` / `ANTHROPIC_MODEL` / `LLM_MODEL` / `MODEL` (or `start({ model })`).
+- **tools** — captured from spans automatically; you can also declare them via `STRATOS_TOOLS=a,b,c` or `start({ tools: [...] })`.
+
 ## Changing the URL or token
 Both come from env, read at startup — change the `.env` value and restart. No code edit, no SDK re-publish.
 
