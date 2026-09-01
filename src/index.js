@@ -51,20 +51,45 @@ function agentDeps() {
 
 function detectFramework() {
   if (process.env.STRATOS_FRAMEWORK) return process.env.STRATOS_FRAMEWORK;
+
   const deps = agentDeps();
-  const has = (n) => n in deps || resolvableFromCwd(n) || resolvable(n);
-  if (has("@google/adk") || has("google-adk") || has("@iqai/adk")) return "google-adk";
-  if (has("@openai/agents")) return "openai-agents";
-  if (has("llamaindex")) return "llamaindex";
-  if (has("crewai")) return "crewai";
-  if (has("@langchain/langgraph")) return "langgraph";
-  if (has("langchain") || has("@langchain/core")) return "langchain";
-  if (has("ai")) return "vercel-ai";
-  if (has("@google/generative-ai") || has("@google/genai")) return "google-genai";
-  if (has("@anthropic-ai/sdk")) return "anthropic";
-  if (has("openai")) return "openai";
+  const inDeps = (n) => n in deps;
+  const isResolvable = (n) => resolvableFromCwd(n) || resolvable(n);
+
+  // 1. FIRST PASS: Check explicit dependencies declared in the user's package.json
+  if (inDeps("@google/adk") || inDeps("google-adk") || inDeps("@iqai/adk")) return "google-adk";
+  if (inDeps("@openai/agents")) return "openai-agents";
+  if (inDeps("llamaindex")) return "llamaindex";
+  if (inDeps("crewai")) return "crewai";
+
+  // If the user explicitly declared langgraph in package.json
+  if (inDeps("@langchain/langgraph")) return "langgraph";
+  // If the user declared langchain or @langchain/core
+  if (inDeps("langchain") || inDeps("@langchain/core")) return "langchain";
+
+  if (inDeps("ai")) return "vercel-ai";
+  if (inDeps("@google/generative-ai") || inDeps("@google/genai")) return "google-genai";
+  if (inDeps("@anthropic-ai/sdk")) return "anthropic";
+  if (inDeps("openai")) return "openai";
+
+  // 2. SECOND PASS: Fallback to node_modules inspection if package.json has no direct match
+  if (isResolvable("@google/adk") || isResolvable("google-adk") || isResolvable("@iqai/adk")) return "google-adk";
+  if (isResolvable("@openai/agents")) return "openai-agents";
+  if (isResolvable("llamaindex")) return "llamaindex";
+  if (isResolvable("crewai")) return "crewai";
+
+  // Prioritize langchain over internal transitive langgraph
+  if (isResolvable("langchain") || isResolvable("@langchain/core")) return "langchain";
+  if (isResolvable("@langchain/langgraph")) return "langgraph";
+
+  if (isResolvable("ai")) return "vercel-ai";
+  if (isResolvable("@google/generative-ai") || isResolvable("@google/genai")) return "google-genai";
+  if (isResolvable("@anthropic-ai/sdk")) return "anthropic";
+  if (isResolvable("openai")) return "openai";
+
   return null;
 }
+
 
 function detectModel(opts) {
   return (
