@@ -14,6 +14,13 @@ import { TELEMETRY_CALL_NAMES } from "./vercel-ai-inject.js";
 const SHIM_URL = "stratos-sdk:ai";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const INJECT_URL = pathToFileURL(join(__dirname, "vercel-ai-inject.js")).href;
+// The network guard (enforcement.js, installed from register.js) already
+// refuses these calls at the fetch layer once blocked — Vercel AI's own client
+// uses fetch internally, same as everyone else. This second check is
+// redundant with that but deliberately kept: it fails before Vercel AI builds
+// its request/retry/streaming machinery, and the error reads as ours rather
+// than as a generic fetch failure surfaced through their error wrapper.
+const ENFORCEMENT_URL = pathToFileURL(join(__dirname, "enforcement.js")).href;
 
 function flagEnabled(name, defaultOn = true) {
   const v = process.env[name];
@@ -67,10 +74,15 @@ export async function load(url, context, nextLoad) {
   let source = "";
   source += `import * as __real from ${JSON.stringify(realUrl)};\n`;
   source += `import { injectTelemetryOptions } from ${JSON.stringify(INJECT_URL)};\n`;
+  source += `import { isBlocked } from ${JSON.stringify(ENFORCEMENT_URL)};\n`;
   source += `
 function __stratosWrap(fn) {
   if (typeof fn !== "function" || fn.__stratosWrapped) return fn;
   const wrapped = function stratosVercelAiWrap(opts, ...rest) {
+    const __b = isBlocked();
+    if (__b.blocked) {
+      throw new Error("[stratos] request blocked: " + (__b.reason || "budget or lifecycle limit reached"));
+    }
     return fn.call(this, injectTelemetryOptions(opts), ...rest);
   };
   wrapped.__stratosWrapped = true;

@@ -16,6 +16,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { enableVercelAiTelemetry } from "./vercel-ai.js";
 import { inspectLangChain } from "./inspect-langchain.js";
+import { setBlocked } from "./enforcement.js";
 
 export { inspectLangChain, fixLangChain } from "./inspect-langchain.js";
 
@@ -112,6 +113,7 @@ export function start(opts = {}) {
   traceloop.initialize({
     appName,
     disableBatch: true,
+    logLevel: process.env.STRATOS_DEBUG ? "debug" : undefined,
     exporter: new OTLPTraceExporter({
       url: ingest,
       headers: { "x-stratos-token": token },
@@ -156,6 +158,13 @@ export function start(opts = {}) {
     tools: toolsEnv,
   };
 
+  // Heartbeat is also how the network guard (enforcement.js) learns whether to
+  // freeze this agent — budget exhausted, period crossed, or the agent
+  // manually disabled from the Control Tower all collapse into the same
+  // { blocked, reason } flag on the server, so the SDK does not need to know
+  // *why*, only that it is. The response used to be discarded entirely
+  // (`.catch(() => {})`, no `.then()`); reading it is the only change here.
+  let warnedBlocked = false;
   const ping = () =>
     fetch(heartbeatUrl, {
       method: "POST",
@@ -164,7 +173,23 @@ export function start(opts = {}) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify(meta),
-    }).catch(() => {});
+    })
+      .then((r) => r.json().catch(() => null))
+      .then((data) => {
+        if (!data || typeof data.blocked !== "boolean") return;
+        setBlocked(data.blocked, data.reason);
+        if (data.blocked && !warnedBlocked) {
+          warnedBlocked = true;
+          console.warn(
+            `[stratos] BLOCKED: ${data.reason || "budget or lifecycle limit reached"} — ` +
+              `outbound calls to LLM providers will be refused until this clears.`
+          );
+        } else if (!data.blocked && warnedBlocked) {
+          warnedBlocked = false;
+          console.log("[stratos] unblocked — outbound calls to LLM providers resumed.");
+        }
+      })
+      .catch(() => {});
   ping();
   if (heartbeatMs > 0) setInterval(ping, heartbeatMs).unref();
 

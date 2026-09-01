@@ -23,6 +23,12 @@ console.log = console.info = (...a) => process.stderr.write(a.map(String).join("
 
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
+// The network guard installed by register.js (see enforcement.js) patches
+// THIS process's fetch/http — it has no effect on the target MCP server, which
+// runs as a separate child process spawned below, possibly in a different
+// language/runtime entirely. The only place budget/lifecycle enforcement can
+// act on that child is here, at the JSON-RPC boundary between the host and it.
+import { setBlocked, isBlocked } from "./enforcement.js";
 
 let argv = process.argv.slice(2);
 const sep = argv.indexOf("--");
@@ -65,9 +71,26 @@ function reportTool(name, argsObj, out, isErr, startMs, endMs) {
   fetch(`${URL}/api/ingest`, { method: "POST", headers: hdr, body: JSON.stringify(body) }).catch(() => {});
 }
 
+let warnedBlocked = false;
 function heartbeat() {
   if (!TOKEN) return;
-  fetch(`${URL}/api/heartbeat`, { method: "POST", headers: hdr }).catch(() => {});
+  fetch(`${URL}/api/heartbeat`, { method: "POST", headers: hdr })
+    .then((r) => r.json().catch(() => null))
+    .then((data) => {
+      if (!data || typeof data.blocked !== "boolean") return;
+      setBlocked(data.blocked, data.reason);
+      // Visible feedback in the proxy's own log (stderr — stdout is the
+      // protocol channel). Without this there is no way to see a block take
+      // effect other than a tool call failing with no explanation.
+      if (data.blocked && !warnedBlocked) {
+        warnedBlocked = true;
+        process.stderr.write(`[stratos-proxy] BLOCKED: ${data.reason || "budget or lifecycle limit reached"} — tools/call will be refused until this clears.\n`);
+      } else if (!data.blocked && warnedBlocked) {
+        warnedBlocked = false;
+        process.stderr.write("[stratos-proxy] unblocked — tool calls resumed.\n");
+      }
+    })
+    .catch(() => {});
 }
 heartbeat();
 const hbTimer = setInterval(heartbeat, HEARTBEAT_MS);
@@ -83,7 +106,24 @@ linePump(process.stdin, (line) => {
   let m; try { m = JSON.parse(line); } catch { child.stdin.write(line + "\n"); return; }
   if (m && m.id != null && m.method === "tools/call") {
     const name = (m.params && m.params.name) || "tool";
-    pendingCalls.set(m.id, { name, args: (m.params && m.params.arguments) || {}, start: Date.now() });
+    const args = (m.params && m.params.arguments) || {};
+    const { blocked, reason } = isBlocked();
+    if (blocked) {
+      // Refuse before the child ever sees this call — do NOT forward to
+      // child.stdin. The host gets a normal JSON-RPC error response (not a
+      // dropped connection), and the refusal itself is still reported so it is
+      // visible on Stratos rather than silently vanishing.
+      const now = Date.now();
+      const errResp = {
+        jsonrpc: "2.0",
+        id: m.id,
+        error: { code: -32001, message: `Stratos: blocked — ${reason || "budget or lifecycle limit reached"}` },
+      };
+      process.stdout.write(JSON.stringify(errResp) + "\n");
+      reportTool(name, args, { blocked: true, reason: reason || null }, true, now, now);
+      return;
+    }
+    pendingCalls.set(m.id, { name, args, start: Date.now() });
   }
   child.stdin.write(line + "\n");
 });
