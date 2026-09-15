@@ -90,6 +90,35 @@ function detectFramework() {
   return null;
 }
 
+/**
+ * Warn user if no supported framework is detected.
+ * Provide list of supported frameworks and docs link.
+ */
+function warnUnsupportedFramework(detectedFramework) {
+  if (detectedFramework) return false; // Framework detected, no warning needed
+
+  const supportedFrameworks = [
+    "LangChain (@langchain/core, @langchain/langgraph)",
+    "OpenAI (@openai/agents, openai)",
+    "Anthropic (@anthropic-ai/sdk)",
+    "Vercel AI (ai)",
+    "Google GenAI (@google/genai, @google/generative-ai)",
+    "LlamaIndex (llamaindex)",
+    "CrewAI (crewai)",
+    "Google ADK (@google/adk, google-adk)",
+    "OpenAI Agents (@openai/agents)",
+  ];
+
+  const message = [
+    "[stratos] ⚠ No supported framework detected.",
+    "[stratos] Supported frameworks:",
+    ...supportedFrameworks.map((fw) => `[stratos]   • ${fw}`),
+    "[stratos] To add your framework: https://docs.stratos.ai/integrate",
+  ].join("\n");
+
+  console.warn(message);
+  return true; // Flag indicating unsupported framework
+}
 
 function detectModel(opts) {
   return (
@@ -182,6 +211,10 @@ export function start(opts = {}) {
     model: detectModel(opts),
     tools: toolsEnv,
   };
+
+  // Warn if no supported framework is detected
+  const isUnsupportedFramework = warnUnsupportedFramework(meta.framework);
+  meta.frameworkSupported = !isUnsupportedFramework;
 
   // Heartbeat is also how the network guard (enforcement.js) learns whether to
   // freeze this agent — budget exhausted, period crossed, or the agent
