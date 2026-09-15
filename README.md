@@ -1,3 +1,7 @@
+## Change version in package.json
+## npm login
+## npm publish --access public
+
 # @intelli-1113/stratos-sdk
 
 **One install** for [Stratos AI](https://github.com) agent observability:
