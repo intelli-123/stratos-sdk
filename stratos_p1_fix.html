@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stratos SDK Security Fix Plan</title>
+
+<style>
+body{
+    font-family:Segoe UI,Arial,sans-serif;
+    background:#f5f7fb;
+    margin:0;
+    padding:0;
+}
+
+.header{
+    background:#0f172a;
+    color:white;
+    padding:25px;
+}
+
+.header h1{
+    margin:0;
+}
+
+.container{
+    width:95%;
+    max-width:1400px;
+    margin:20px auto;
+}
+
+.summary{
+    background:white;
+    padding:20px;
+    border-radius:10px;
+    box-shadow:0 2px 8px rgba(0,0,0,.1);
+    margin-bottom:20px;
+}
+
+.fix-card{
+    background:white;
+    border-radius:12px;
+    padding:20px;
+    margin-bottom:15px;
+    box-shadow:0 2px 8px rgba(0,0,0,.08);
+    border-left:6px solid #dc2626;
+}
+
+.fix-header{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    flex-wrap:wrap;
+}
+
+.badge{
+    background:#dc2626;
+    color:white;
+    padding:5px 10px;
+    border-radius:20px;
+    font-size:12px;
+}
+
+.btn{
+    background:#2563eb;
+    color:white;
+    border:none;
+    padding:10px 16px;
+    border-radius:6px;
+    cursor:pointer;
+}
+
+.btn:hover{
+    background:#1d4ed8;
+}
+
+.details{
+    display:none;
+    margin-top:15px;
+    border-top:1px solid #ddd;
+    padding-top:15px;
+}
+
+.phase{
+    background:white;
+    padding:20px;
+    margin-top:20px;
+    border-radius:10px;
+    box-shadow:0 2px 8px rgba(0,0,0,.08);
+}
+
+.phase h3{
+    margin-top:0;
+}
+
+.checklist{
+    background:white;
+    margin-top:20px;
+    padding:20px;
+    border-radius:10px;
+    box-shadow:0 2px 8px rgba(0,0,0,.08);
+}
+
+.checklist label{
+    display:block;
+    padding:6px 0;
+}
+
+.top-actions{
+    text-align:right;
+    margin-bottom:15px;
+}
+
+.top-btn{
+    padding:10px 15px;
+    margin-left:10px;
+    border:none;
+    border-radius:6px;
+    cursor:pointer;
+    background:#111827;
+    color:white;
+}
+</style>
+</head>
+
+<body>
+
+<div class="header">
+    <h1>Stratos SDK Security Fix Plan</h1>
+    <p>7 P1 Critical Issues - Interactive Dashboard</p>
+</div>
+
+<div class="container">
+
+    <div class="top-actions">
+        <button class="top-btn" onclick="expandAll()">Expand All</button>
+        <button class="top-btn" onclick="collapseAll()">Collapse All</button>
+    </div>
+
+    <div class="summary">
+        <h2>Executive Summary</h2>
+        <p>
+            7 Critical P1 issues identified across enforcement.js,
+            index.js, mcp-proxy.js and inspect-langchain.js.
+        </p>
+
+        <ul>
+            <li>Phase 1 - Kill Switch Fixes</li>
+            <li>Phase 2 - Privacy & Process Cleanup</li>
+            <li>Phase 3 - Project Safety</li>
+            <li>Phase 4 - Optional Enhancements</li>
+        </ul>
+    </div>
+
+    <!-- P1-01 -->
+    <div class="fix-card">
+        <div class="fix-header">
+            <h3>P1-01 - Kill Switch Bypass</h3>
+            <span class="badge">Critical</span>
+        </div>
+
+        <p>https.get() bypasses enforcement guard.</p>
+
+        <button class="btn" onclick="toggle('f1')">View Fix</button>
+
+        <div id="f1" class="details">
+            <b>File:</b> enforcement.js<br>
+            <b>Lines:</b> 149-163<br><br>
+
+            <b>Problem</b>
+            <p>Guard patches request() but not get(). Named imports may bypass protection.</p>
+
+            <b>Recommended Fix</b>
+            <ul>
+                <li>Wrap http.get()</li>
+                <li>Wrap https.get()</li>
+                <li>Call syncBuiltinESMExports()</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- P1-02 -->
+    <div class="fix-card">
+        <div class="fix-header">
+            <h3>P1-02 - Provider Coverage Gap</h3>
+            <span class="badge">Critical</span>
+        </div>
+
+        <p>Hardcoded provider list misses future model providers.</p>
+
+        <button class="btn" onclick="toggle('f2')">View Fix</button>
+
+        <div id="f2" class="details">
+            <b>File:</b> enforcement.js<br>
+            <b>Lines:</b> 57-69<br><br>
+
+            <b>Fix</b>
+            <ul>
+                <li>Add api.* wildcard matching</li>
+                <li>Support server-driven block list</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- P1-03 -->
+    <div class="fix-card">
+        <div class="fix-header">
+            <h3>P1-03 - Heartbeat Bypass</h3>
+            <span class="badge">Critical</span>
+        </div>
+
+        <p>401 response silently ignored.</p>
+
+        <button class="btn" onclick="toggle('f3')">View Fix</button>
+
+        <div id="f3" class="details">
+            <b>File:</b> index.js<br>
+            <b>Lines:</b> 237,252<br><br>
+
+            <ul>
+                <li>Treat 401 as blocked</li>
+                <li>Treat 403 as blocked</li>
+                <li>Enforce minimum 10-second heartbeat</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- P1-04 -->
+    <div class="fix-card">
+        <div class="fix-header">
+            <h3>P1-04 - Prompt Privacy Leakage</h3>
+            <span class="badge">Critical</span>
+        </div>
+
+        <p>Input recording disable flag not applied globally.</p>
+
+        <button class="btn" onclick="toggle('f4')">View Fix</button>
+
+        <div id="f4" class="details">
+            <b>File:</b> index.js<br><br>
+
+            <ul>
+                <li>Pass traceContent flag</li>
+                <li>Respect STRATOS_RECORD_INPUTS=0</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- P1-05 -->
+    <div class="fix-card">
+        <div class="fix-header">
+            <h3>P1-05 - Orphan MCP Processes</h3>
+            <span class="badge">Critical</span>
+        </div>
+
+        <p>Child processes remain running after host exit.</p>
+
+        <button class="btn" onclick="toggle('f5')">View Fix</button>
+
+        <div id="f5" class="details">
+            <ul>
+                <li>Close child stdin on stream end</li>
+                <li>Forward SIGINT</li>
+                <li>Forward SIGTERM</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- P1-06 -->
+    <div class="fix-card">
+        <div class="fix-header">
+            <h3>P1-06 - Windows Shell Injection</h3>
+            <span class="badge">Critical</span>
+        </div>
+
+        <p>shell:true allows command/path injection.</p>
+
+        <button class="btn" onclick="toggle('f6')">View Fix</button>
+
+        <div id="f6" class="details">
+            <ul>
+                <li>Replace spawn with cross-spawn</li>
+                <li>Remove shell:true</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- P1-07 -->
+    <div class="fix-card">
+        <div class="fix-header">
+            <h3>P1-07 - Broken Project Recovery</h3>
+            <span class="badge">Critical</span>
+        </div>
+
+        <p>Package uninstall doesn't restore on failure.</p>
+
+        <button class="btn" onclick="toggle('f7')">View Fix</button>
+
+        <div id="f7" class="details">
+            <ul>
+                <li>Backup package.json</li>
+                <li>Backup lock files</li>
+                <li>Restore if install fails</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="phase">
+        <h3>Implementation Phases</h3>
+
+        <h4>Phase 1</h4>
+        <p>P1-01, P1-02, P1-03</p>
+
+        <h4>Phase 2</h4>
+        <p>P1-04, P1-05, P1-06</p>
+
+        <h4>Phase 3</h4>
+        <p>P1-07</p>
+
+        <h4>Phase 4</h4>
+        <p>Optional Enhancements</p>
+    </div>
+
+    <div class="checklist">
+        <h3>Testing Checklist</h3>
+
+        <label><input type="checkbox"> Guard blocks https.get()</label>
+        <label><input type="checkbox"> Named import validation</label>
+        <label><input type="checkbox"> Provider wildcard validation</label>
+        <label><input type="checkbox"> 401/403 blocking validation</label>
+        <label><input type="checkbox"> Heartbeat minimum enforcement</label>
+        <label><input type="checkbox"> Traceloop privacy validation</label>
+        <label><input type="checkbox"> MCP process cleanup</label>
+        <label><input type="checkbox"> Windows spawn security test</label>
+        <label><input type="checkbox"> Package restore validation</label>
+    </div>
+
+</div>
+
+<script>
+function toggle(id){
+    const e=document.getElementById(id);
+    e.style.display=(e.style.display==="block")?"none":"block";
+}
+
+function expandAll(){
+    document.querySelectorAll('.details').forEach(x=>{
+        x.style.display="block";
+    });
+}
+
+function collapseAll(){
+    document.querySelectorAll('.details').forEach(x=>{
+        x.style.display="none";
+    });
+}
+</script>
+
+</body>
+</html>

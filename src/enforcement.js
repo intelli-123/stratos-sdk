@@ -73,7 +73,9 @@ function providerHosts() {
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
-  return [...DEFAULT_PROVIDER_HOSTS, ...extra];
+  // P1-02: Add "api." catch-all to block future/unlisted providers (NVIDIA, DeepSeek, Fireworks, xAI, etc.)
+  // while keeping explicit list for clarity
+  return [...DEFAULT_PROVIDER_HOSTS, ...extra, "api."];
 }
 
 // Never guard Stratos's own host: the agent has to be able to reach Stratos to
@@ -160,4 +162,23 @@ function patchRequestModule(mod) {
   };
   guarded.__stratosGuarded = true;
   mod.request = guarded;
+
+  // P1-01: Also wrap .get() to catch https.get() and named imports like `import { get } from "node:https"`
+  if (mod.get && !mod.get.__stratosGuarded) {
+    const realGet = mod.get;
+    const guardedGet = function stratosGuardedGet(...args) {
+      const opts = args.find((a) => a && typeof a === "object" && typeof a !== "function");
+      const host = opts ? String(opts.hostname || opts.host || "") : hostFromInput(args[0]);
+      if (isGuardedHost(host)) {
+        const { blocked, reason } = isBlocked();
+        if (blocked) throw new StratosBudgetBlockedError(reason);
+      }
+      return realGet.apply(mod, args);
+    };
+    guardedGet.__stratosGuarded = true;
+    mod.get = guardedGet;
+  }
+
+  // Ensure named imports (import { request, get } from "node:https") see wrapped versions
+  module.syncBuiltinESMExports?.();
 }

@@ -149,9 +149,11 @@ export function start(opts = {}) {
     process.env.STRATOS_APP_NAME ||
     process.env.npm_package_name ||
     "agent";
-  const heartbeatMs = Number(
+  // P1-03: Prevent STRATOS_HEARTBEAT_MS=0 from disabling heartbeat (unblockable agent)
+  // Minimum 1s to allow normal config but prevent 0
+  const heartbeatMs = Math.max(1000, Number(
     opts.heartbeatMs || process.env.STRATOS_HEARTBEAT_MS || 30000
-  );
+  ));
 
   if (!token) {
     console.warn(
@@ -164,10 +166,18 @@ export function start(opts = {}) {
   const ingest = `${origin}/api/ingest`;
   const heartbeatUrl = `${origin}/api/heartbeat`;
 
+  // P1-04: Helper to check if a feature flag is enabled (matches Vercel AI convention)
+  function flagEnabled(key) {
+    const val = process.env[key];
+    return val !== "0" && val !== "false";
+  }
+
   traceloop.initialize({
     appName,
     disableBatch: true,
     logLevel: process.env.STRATOS_DEBUG ? "debug" : undefined,
+    // P1-04: Respect STRATOS_RECORD_INPUTS/OUTPUTS for all frameworks (not just Vercel AI)
+    traceContent: flagEnabled('STRATOS_RECORD_INPUTS') && flagEnabled('STRATOS_RECORD_OUTPUTS'),
     exporter: new OTLPTraceExporter({
       url: ingest,
       headers: { "x-stratos-token": token },
@@ -232,7 +242,14 @@ export function start(opts = {}) {
       },
       body: JSON.stringify(meta),
     })
-      .then((r) => r.json().catch(() => null))
+      .then((r) => {
+        // P1-03: Treat 401/403 (revoked token) as blocked state
+        if (r.status === 401 || r.status === 403) {
+          setBlocked(true, "token revoked or unauthorized");
+          return null;
+        }
+        return r.json().catch(() => null);
+      })
       .then((data) => {
         if (!data || typeof data.blocked !== "boolean") return;
         setBlocked(data.blocked, data.reason);

@@ -9,7 +9,7 @@
 //   npx stratos-inspect --fix --yes
 
 import { createRequire } from "node:module";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { createInterface } from "node:readline";
@@ -317,6 +317,12 @@ export async function fixLangChain(opts = {}) {
   console.log(`\n[stratos-inspect] Using package manager: ${pm}`);
   console.log(`[stratos-inspect] Uninstalling old LangChain packages…`);
 
+  // P1-07: Back up package.json and lockfile before making changes
+  const pkgPath = join(cwd, "package.json");
+  const lockPath = join(cwd, `${pm}-lock.${pm === "yarn" ? "yaml" : pm === "bun" ? "lock" : "json"}`);
+  const pkgBackup = readFileSync(pkgPath, "utf8");
+  const lockBackup = existsSync(lockPath) ? readFileSync(lockPath, "utf8") : null;
+
   let uninstallOk = true;
   if (toRemove.length) {
     if (pm === "npm") {
@@ -353,9 +359,23 @@ export async function fixLangChain(opts = {}) {
     installOk = runPm("bun", ["add", ...installList], cwd);
   }
 
+  // P1-07: If install failed, restore backups to leave project in consistent state
+  if (!installOk) {
+    console.log(`[stratos-inspect] Restoring package.json and lockfile…`);
+    writeFileSync(pkgPath, pkgBackup);
+    if (lockBackup) writeFileSync(lockPath, lockBackup);
+    return {
+      ok: false,
+      step: "install",
+      plan,
+      reportBefore: report,
+      message: "Install failed — backups restored. Fix manually and re-run stratos-inspect --fix",
+    };
+  }
+
   const after = inspectLangChain({ cwd });
   return {
-    ok: installOk && after.status === "ok",
+    ok: after.status === "ok",
     step: "install",
     plan,
     reportBefore: report,

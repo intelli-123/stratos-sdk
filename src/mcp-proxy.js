@@ -21,7 +21,8 @@
 // CRITICAL: stdout is the MCP channel — keep it clean. Route all logging to stderr.
 console.log = console.info = (...a) => process.stderr.write(a.map(String).join(" ") + "\n");
 
-import { spawn } from "node:child_process";
+// P1-06: Use cross-spawn to safely handle arguments on Windows (avoids shell injection)
+import spawn from "cross-spawn";
 import { randomBytes } from "node:crypto";
 // The network guard installed by register.js (see enforcement.js) patches
 // THIS process's fetch/http — it has no effect on the target MCP server, which
@@ -98,9 +99,20 @@ hbTimer.unref?.();
 
 const pendingCalls = new Map();
 
-const child = spawn(cmd, args, { stdio: ["pipe", "pipe", "inherit"], shell: process.platform === "win32" });
+// P1-06: cross-spawn handles Windows paths transparently without shell
+const child = spawn(cmd, args, { stdio: ["pipe", "pipe", "inherit"] });
 child.on("error", (e) => { process.stderr.write(`[stratos-proxy] failed to start target: ${e.message}\n`); process.exit(1); });
 child.on("exit", (code) => { try { heartbeat(); clearInterval(hbTimer); } catch {} process.exit(code == null ? 0 : code); });
+
+// P1-05: Forward signals to child process and handle cleanup
+for (const sig of ["SIGINT", "SIGTERM"]) {
+  process.on(sig, () => {
+    if (child.pid && !child.killed) {
+      child.kill(sig);
+      setTimeout(() => { if (!child.killed) child.kill("SIGKILL"); }, 2000);
+    }
+  });
+}
 
 linePump(process.stdin, (line) => {
   let m; try { m = JSON.parse(line); } catch { child.stdin.write(line + "\n"); return; }
@@ -148,5 +160,11 @@ function linePump(stream, onLine) {
       if (line.trim()) onLine(line);
     }
   });
-  stream.on("end", () => { if (buf.trim()) onLine(buf); });
+  stream.on("end", () => {
+    if (buf.trim()) onLine(buf);
+    // P1-05: When host disconnects (stdin ends), close child's stdin to signal EOF
+    if (stream === process.stdin && child.stdin) {
+      child.stdin.end();
+    }
+  });
 }
