@@ -1,6 +1,6 @@
 {
   "name": "@intelli-1113/stratos-sdk",
-  "version": "1.3.5",
+  "version": "1.3.6",
   "description": "Stratos AI agent telemetry (OpenLLMetry), Vercel AI auto-spans, LangChain inspect/fix, MCP proxy.",
   "type": "module",
   "main": "./src/index.js",
@@ -14,12 +14,12 @@
     "./config-templates": "./src/config-templates.js"
   },
   "bin": {
-    "stratos": "./src/cli.js",
-    "stratos-setup": "./src/cli-setup.js",
-    "stratos-doctor": "./src/cli-doctor.js",
-    "stratos-otel-bridge": "./src/otel-bridge.js",
-    "stratos-mcp-proxy": "./src/mcp-proxy.js",
-    "stratos-inspect": "./src/cli-inspect.js"
+    "stratos": "src/cli.js",
+    "stratos-setup": "src/cli-setup.js",
+    "stratos-doctor": "src/cli-doctor.js",
+    "stratos-otel-bridge": "src/otel-bridge.js",
+    "stratos-mcp-proxy": "src/mcp-proxy.js",
+    "stratos-inspect": "src/cli-inspect.js"
   },
   "files": [
     "src"
@@ -56,5 +56,6 @@
     "@langchain/core": {
       "optional": true
     }
-  }
+  },
+  "author": ""
 }

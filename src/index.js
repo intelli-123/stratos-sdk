@@ -163,6 +163,10 @@ export function start(opts = {}) {
   }
   started = true;
 
+  // Display SDK version on app startup
+  const SDK_VERSION = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version;
+  console.log(`[stratos] Stratos SDK v${SDK_VERSION} initialized`);
+
   const ingest = `${origin}/api/ingest`;
   const heartbeatUrl = `${origin}/api/heartbeat`;
 

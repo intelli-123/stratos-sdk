@@ -1,144 +1,127 @@
-#!/usr/bin/env node
+// `stratos doctor` — check the Claude Code ↔ Stratos connection.
+// Reads the files setup writes (not this shell's environment), so it gives the
+// same answer no matter where it is run from.
 
-import { existsSync, readFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
+import spawn from "cross-spawn";
+import {
+  HOOK_EVENTS,
+  claudeSettingsPath,
+  configExists,
+  configFile,
+  hasLegacyNodeOptions,
+  isStratosHook,
+  loadConfig,
+  stratosDir,
+} from "./claude-code/settings.js";
+
+function readJson(file) {
+  try {
+    return JSON.parse(readFileSync(file, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+/** Paths quoted in a hook command, e.g. node "C:/…/cli.js" hook stop */
+const quotedPaths = (cmd) => [...cmd.matchAll(/"([^"]+)"/g)].map((m) => m[1]);
 
 export async function doctorCommand() {
-  console.log("[stratos-doctor] Running diagnostics...\n");
-
-  const checks = [];
-  let passed = 0;
+  console.log("[stratos-doctor] Checking Claude Code → Stratos…\n");
   let failed = 0;
-
-  const token = process.env.STRATOS_TOKEN;
-  const url = process.env.STRATOS_URL || "https://stratos.anthropic.com";
-
-  if (token && token.startsWith("sk_")) {
-    console.log("✓ STRATOS_TOKEN set");
-    passed++;
-  } else {
-    console.log("✗ STRATOS_TOKEN missing or invalid (must start with sk_)");
-    checks.push("Set STRATOS_TOKEN environment variable with your enrollment token");
+  const fixes = [];
+  const ok = (m) => console.log(`✓ ${m}`);
+  const warn = (m, fix) => {
+    console.log(`⚠ ${m}`);
+    if (fix) fixes.push(fix);
+  };
+  const fail = (m, fix) => {
+    console.log(`✗ ${m}`);
     failed++;
-  }
+    if (fix) fixes.push(fix);
+  };
 
-  if (url && url.startsWith("https://")) {
-    console.log(`✓ STRATOS_URL configured: ${url}`);
-    passed++;
+  const cfg = loadConfig();
+  if (configExists()) ok(`Config: ${configFile()}`);
+  else if (cfg.token) warn("No config file — using STRATOS_* environment variables", "Run: stratos setup claude-code");
+  else fail("No Stratos config", "Run: stratos setup claude-code --token <token> --url <url>");
+
+  // The token format is the server's business; whether it is valid is checked below against Stratos itself.
+  if (cfg.token) ok("Token present");
+  else fail("Token missing", "Run: stratos setup claude-code --token <token>");
+
+  const local = /^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|\/|$)/.test(cfg.url);
+  if (cfg.url.startsWith("https://") || local) ok(`Server: ${cfg.url}`);
+  else warn(`Server ${cfg.url} is plain http — token is sent unencrypted`);
+
+  const settingsPath = claudeSettingsPath();
+  const settings = existsSync(settingsPath) ? readJson(settingsPath) : null;
+  if (!settings) {
+    fail(`Cannot read ${settingsPath}`, "Run: stratos setup claude-code");
   } else {
-    console.log("✗ STRATOS_URL missing or invalid (must be https://)");
-    checks.push("Set STRATOS_URL environment variable");
-    failed++;
-  }
-
-  if (process.env.NODE_OPTIONS?.includes("stratos-sdk/register")) {
-    console.log("✓ NODE_OPTIONS includes stratos-sdk/register");
-    passed++;
-  } else {
-    console.log("✗ NODE_OPTIONS not set to include stratos-sdk/register");
-    checks.push(
-      "Add to NODE_OPTIONS: --import @intelli-1113/stratos-sdk/register"
-    );
-    failed++;
-  }
-
-  if (process.env.STRATOS_RECORD_INPUTS === "0") {
-    console.log("✓ STRATOS_RECORD_INPUTS=0 (content-off)");
-    passed++;
-  } else {
-    console.log("⚠ STRATOS_RECORD_INPUTS not set to 0 (prompts may be recorded)");
-    checks.push("Set STRATOS_RECORD_INPUTS=0 to disable prompt recording");
-  }
-
-  if (process.env.STRATOS_RECORD_OUTPUTS === "0") {
-    console.log("✓ STRATOS_RECORD_OUTPUTS=0 (content-off)");
-    passed++;
-  } else {
-    console.log(
-      "⚠ STRATOS_RECORD_OUTPUTS not set to 0 (responses may be recorded)"
-    );
-    checks.push("Set STRATOS_RECORD_OUTPUTS=0 to disable response recording");
-  }
-
-  const claudeDir = join(homedir(), ".claude");
-  const settingsPath = join(claudeDir, "settings.json");
-  const envPath = join(claudeDir, ".env");
-
-  if (existsSync(settingsPath)) {
-    console.log(`✓ Settings file exists: ${settingsPath}`);
-    passed++;
-  } else {
-    console.log(`✗ Settings file missing: ${settingsPath}`);
-    checks.push("Run: stratos setup claude-code");
-    failed++;
-  }
-
-  if (existsSync(envPath)) {
-    console.log(`✓ Environment file exists: ${envPath}`);
-    passed++;
-  } else {
-    console.log(`⚠ Env file missing: ${envPath}`);
-    checks.push("Run: stratos setup claude-code");
-  }
-
-  if (token && url && failed === 0) {
-    try {
-      console.log("\n[stratos-doctor] Testing connectivity...");
-      const response = await fetch(`${url}/api/health`, {
-        method: "GET",
-        headers: {
-          "x-stratos-token": token,
-          "user-agent": "stratos-sdk-doctor",
-        },
-        timeout: 5000,
-      });
-
-      if (response.ok) {
-        console.log("✓ Connected to Stratos server");
-        passed++;
-      } else if (response.status === 401 || response.status === 403) {
-        console.log(`✗ Stratos server rejected token (${response.status})`);
-        checks.push("Verify STRATOS_TOKEN is correct");
-        failed++;
-      } else {
-        console.log(`✗ Stratos server returned ${response.status}`);
-        checks.push(`Check STRATOS_URL (got ${response.status})`);
-        failed++;
+    for (const event of Object.keys(HOOK_EVENTS)) {
+      const handlers = (settings.hooks?.[event] || []).flatMap((g) => g?.hooks || []);
+      const ours = handlers.find(isStratosHook);
+      if (!ours) {
+        fail(`Hook ${event} missing`, "Run: stratos setup claude-code");
+        continue;
       }
-    } catch (err) {
-      console.log(`✗ Could not connect to Stratos server: ${err.message}`);
-      checks.push(
-        `Check STRATOS_URL is reachable: ${url}\n` +
-          `Common issues:\n` +
-          `  - Network connectivity\n` +
-          `  - Firewall blocking\n` +
-          `  - Invalid URL`
+      const missing = quotedPaths(ours.command).filter((p) => !existsSync(p));
+      if (missing.length) fail(`Hook ${event} points at missing file: ${missing.join(", ")}`, "Re-run: stratos setup claude-code");
+      else ok(`Hook ${event}`);
+    }
+    const nodeOnPath = spawn.sync("node", ["--version"], { encoding: "utf8", timeout: 5000 });
+    if (nodeOnPath.status === 0) ok(`node on PATH (${nodeOnPath.stdout.trim()}) — hooks can start`);
+    else fail("`node` is not on PATH, so the hooks cannot start", "Add Node.js to PATH, then restart Claude Code");
+    if (hasLegacyNodeOptions(settings.env)) {
+      fail(
+        "settings.json env still sets NODE_OPTIONS=--import …stratos-sdk/register (breaks Node commands Claude runs)",
+        "Re-run: stratos setup claude-code (removes it)"
       );
-      failed++;
+    }
+    if (settings.env?.STRATOS_TOKEN) {
+      warn("settings.json env contains STRATOS_TOKEN — visible to every command Claude runs", "Re-run: stratos setup claude-code (moves it)");
+    }
+  }
+
+  const status = readJson(join(stratosDir(), "status.json")) || {};
+  if (status.lastSendAt) ok(`Last successful send: ${status.lastSendAt}`);
+  else console.log("· No usage sent yet (expected until a Claude Code session finishes a turn)");
+  if (status.lastError) warn(`Last error: ${status.lastError}`);
+
+  const outbox = join(stratosDir(), "outbox");
+  if (existsSync(outbox)) {
+    const files = readdirSync(outbox).filter((f) => f.endsWith(".json"));
+    if (files.length) {
+      const kb = Math.round(files.reduce((n, f) => n + statSync(join(outbox, f)).size, 0) / 1024);
+      warn(`${files.length} undelivered batch(es) waiting in outbox (${kb} KB) — sent on the next hook once Stratos is reachable`);
+    }
+  }
+
+  if (cfg.token) {
+    try {
+      const res = await fetch(`${cfg.url}/api/heartbeat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-stratos-token": cfg.token },
+        body: JSON.stringify({ framework: "claude-code", model: null, tools: [], doctor: true }),
+        signal: AbortSignal.timeout(5000),
+      });
+      if (res.ok) ok("Stratos accepted the token");
+      else if (res.status === 401 || res.status === 403) fail(`Stratos rejected the token (${res.status})`, "Check the token in Stratos > Add agent");
+      else fail(`Stratos returned ${res.status}`, `Check the URL: ${cfg.url}`);
+    } catch (err) {
+      fail(`Cannot reach ${cfg.url}: ${err.cause?.code || err.message}`, "Check network, VPN or firewall, and the URL");
     }
   }
 
   console.log("\n" + "=".repeat(60));
-  if (failed === 0) {
-    console.log("✓ stratos-doctor: All checks passed");
-    console.log(
-      "\nYou are connected to Stratos. Your Claude usage will now be tracked."
-    );
+  if (!failed) {
+    console.log("✓ All checks passed — new Claude Code sessions report usage to Stratos.");
   } else {
-    console.log(`✗ stratos-doctor: ${failed} check(s) failed\n`);
-    if (checks.length > 0) {
-      console.log("Remediation steps:");
-      checks.forEach((check, i) => {
-        console.log(`  ${i + 1}. ${check}`);
-      });
-    }
-    process.exit(1);
+    console.log(`✗ ${failed} check(s) failed`);
+    [...new Set(fixes)].forEach((f, i) => console.log(`  ${i + 1}. ${f}`));
+    process.exitCode = 1;
   }
-  console.log("=".repeat(60) + "\n");
+  console.log("=".repeat(60));
 }
-
-doctorCommand().catch((err) => {
-  console.error("[stratos-doctor] Fatal error:", err.message);
-  process.exit(1);
-});

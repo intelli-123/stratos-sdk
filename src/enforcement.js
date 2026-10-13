@@ -73,9 +73,7 @@ function providerHosts() {
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
-  // P1-02: Add "api." catch-all to block future/unlisted providers (NVIDIA, DeepSeek, Fireworks, xAI, etc.)
-  // while keeping explicit list for clarity
-  return [...DEFAULT_PROVIDER_HOSTS, ...extra, "api."];
+  return [...DEFAULT_PROVIDER_HOSTS, ...extra];
 }
 
 // Never guard Stratos's own host: the agent has to be able to reach Stratos to
