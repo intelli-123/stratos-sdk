@@ -43,6 +43,10 @@ const version = getSDKVersion();
 console.log(`
 ✨ Welcome to Stratos SDK v${version}!
 
+Installation:
+  Global (recommended): npm install -g @intelli-1113/stratos-sdk
+  Local project: npm install @intelli-1113/stratos-sdk
+
 Get started:
   → Run: stratos --help
 
