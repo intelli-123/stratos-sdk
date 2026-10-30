@@ -43,6 +43,15 @@ const URL = (process.env.STRATOS_URL || "http://localhost:4000").replace(/\/+$/,
 const APP_NAME = process.env.STRATOS_APP_NAME || ("mcp:" + (args[args.length - 1] || cmd).replace(/[^a-zA-Z0-9._@/-]/g, "").slice(-40));
 const HEARTBEAT_MS = Number(process.env.STRATOS_HEARTBEAT_MS || 30000);
 
+function detectClient() {
+  if (process.env.STRATOS_CLIENT) return process.env.STRATOS_CLIENT.toLowerCase().trim();
+  if (process.env.STRATOS_SURFACE) return process.env.STRATOS_SURFACE.toLowerCase().trim();
+  if (process.env.CURSOR_VERSION || process.env.CURSOR_AGENT) return "cursor";
+  if (process.env.VSCODE_PID || process.env.VSCODE_INJECTION || process.env.TERM_PROGRAM === "vscode") return "vscode";
+  return "";
+}
+const CLIENT = detectClient();
+
 if (!TOKEN) process.stderr.write("[stratos-proxy] STRATOS_TOKEN not set — telemetry disabled (proxying only).\n");
 console.log(`[stratos-proxy] proxying "${target}" as "${APP_NAME}" → ${URL}`);
 
@@ -55,7 +64,7 @@ function reportTool(name, argsObj, out, isErr, startMs, endMs) {
   const attr = (k, v) => ({ key: k, value: { stringValue: String(v) } });
   const body = {
     resourceSpans: [{
-      resource: { attributes: [attr("service.name", APP_NAME)] },
+      resource: { attributes: [attr("service.name", APP_NAME), ...(CLIENT ? [attr("stratos.surface", CLIENT), attr("client.name", CLIENT)] : [])] },
       scopeSpans: [{ spans: [{
         traceId: hex(16), spanId: hex(8),
         name: `${name}.tool`,
@@ -65,6 +74,7 @@ function reportTool(name, argsObj, out, isErr, startMs, endMs) {
           attr("traceloop.entity.name", name),
           attr("traceloop.entity.input", JSON.stringify({ tool_name: name, arguments: argsObj || {} })),
           attr("traceloop.entity.output", JSON.stringify({ content: out, is_error: !!isErr })),
+          ...(CLIENT ? [attr("stratos.surface", CLIENT), attr("client.name", CLIENT)] : []),
         ],
       }] }],
     }],
@@ -75,7 +85,7 @@ function reportTool(name, argsObj, out, isErr, startMs, endMs) {
 let warnedBlocked = false;
 function heartbeat() {
   if (!TOKEN) return;
-  fetch(`${URL}/api/heartbeat`, { method: "POST", headers: hdr })
+  fetch(`${URL}/api/heartbeat`, { method: "POST", headers: hdr, body: CLIENT ? JSON.stringify({ telemetry_meta: { client: CLIENT } }) : undefined })
     .then((r) => r.json().catch(() => null))
     .then((data) => {
       if (!data || typeof data.blocked !== "boolean") return;
